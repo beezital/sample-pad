@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sample Pad</title>
+<style>
+  :root {
+    --bg: #0d0d11;
+    --panel: #17171d;
+    --text: #e8e8ee;
+    --muted: #8a8a96;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  header {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+  }
+
+  h1 {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin: 0;
+    color: var(--muted);
+  }
+
+  /* ----- mode switch ----- */
+  .mode-switch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .mode-switch .active-label { color: var(--text); font-weight: 600; }
+
+  .toggle {
+    position: relative;
+    width: 52px;
+    height: 28px;
+    border-radius: 14px;
+    background: #2a2a33;
+    border: 1px solid #3a3a45;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .toggle::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #cfcfda;
+    transition: transform .2s;
+  }
+  .toggle.config { background: #4a3a10; border-color: #6d5a1e; }
+  .toggle.config::after { transform: translateX(24px); background: #ffc63f; }
+
+  /* ----- pad grid ----- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+    /* zoom scales the pads; the width formula keeps the visual width
+       capped at 92vw so shrinking the window stays responsive */
+    zoom: var(--zoom, 1);
+    width: min(calc(92vw / var(--zoom, 1)), 640px);
+    padding-bottom: 30px;
+  }
+
+  /* ----- zoom slider ----- */
+  .zoombar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .zoombar input[type="range"] {
+    width: 140px;
+    accent-color: #8a8a96;
+  }
+  .zoombar .val { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  /* three states, like a backlit translucent button:
+     empty = switched off, loaded = switched on, playing = bright */
+  .pad {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    border-radius: 14px;
+    border: none;
+    background:
+      linear-gradient(rgba(255,255,255,.22), rgba(255,255,255,0) 42%),
+      radial-gradient(ellipse 130% 100% at 50% 45%,
+        color-mix(in srgb, var(--pad-color) 78%, #fff) 0%,
+        var(--pad-color) 52%,
+        color-mix(in srgb, var(--pad-color) 78%, #101015) 100%);
+    color: #0a0a0e;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 26px 8px 12px;
+    transition: box-shadow .15s, transform .05s, filter .15s;
+    overflow: hidden;
+  }
+  .pad:active { transform: scale(.97); }
+  .pad:not(.empty):hover { filter: brightness(1.08); }
+
+  .pad.empty {
+    background: color-mix(in srgb, var(--pad-color) 9%, #1e1e26);
+    color: color-mix(in srgb, var(--pad-color) 75%, #1e1e26);
+    cursor: default;
+  }
+
+  .pad.playing {
+    background: color-mix(in srgb, var(--pad-color) 62%, #ffffff);
+    box-shadow: 0 0 28px var(--pad-color);
+    animation: pulse 1s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    50% { box-shadow: 0 0 55px var(--pad-color); }
+  }
+
+  .pad .name {
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.25;
+    max-width: 100%;
+    max-height: 4em;
+    overflow: hidden;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  /* keyboard shortcut: keycap-style badge */
+  .pad .key {
+    position: absolute;
+    top: 9px; right: 9px;
+    min-width: 28px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 400;
+    padding: 4px 8px;
+    border-radius: 7px;
+    border: 1px solid #eaeaf2;
+    background: #34343e;
+    color: #eaeaf2;
+    pointer-events: none;
+  }
+  .pad.empty .key {
+    border-color: #b8b8c2;
+    color: #b8b8c2;
+    background: #1e1e26;
+    opacity: .45;
+  }
+
+  /* progress bar while playing: light gray fill inside a rounded track */
+  .pad .progress {
+    display: none;
+    position: absolute;
+    bottom: 10px; left: 12px; right: 12px;
+    height: 10px;
+    border-radius: 6px;
+    border: 1px solid #b8b8c2;
+    background: #1e1e26;
+    padding: 2px;
+    pointer-events: none;
+  }
+  .pad.playing .progress { display: block; }
+  .pad .progress::after {
+    content: "";
+    display: block;
+    height: 100%;
+    width: var(--p, 0%);
+    border-radius: 3px;
+    background: #cfcfd8;
+  }
+
+  /* ----- config mode controls ----- */
+  .pad .cfg {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  body.config-mode .pad .cfg { display: flex; }
+  body.config-mode .pad { cursor: default; }
+
+  .cfg button {
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,.55);
+    background: rgba(0,0,0,.3);
+    color: #0a0a0e;
+    cursor: pointer;
+  }
+  .cfg button:hover { background: rgba(0,0,0,.45); color: #fff; }
+  .pad.empty .cfg button {
+    border-color: var(--pad-color);
+    background: color-mix(in srgb, var(--pad-color) 20%, #101015);
+    color: var(--text);
+  }
+  .pad.empty .cfg button:hover { background: color-mix(in srgb, var(--pad-color) 35%, #101015); }
+  .cfg button.clear { font-size: 11px; padding: 3px 10px; opacity: .8; }
+
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    padding-bottom: 20px;
+    min-height: 16px;
+  }
+
+  input[type="file"] { display: none; }
+
+  footer {
+    font-size: 12px;
+    color: var(--muted);
+    padding-bottom: 18px;
+  }
+  footer a {
+    color: var(--muted);
+    text-decoration: underline;
+  }
+  footer a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Sample Pad</h1>
+    <div class="zoombar">
+      <label for="zoomSlider">Zoom</label>
+      <input type="range" id="zoomSlider" min="50" max="200" step="5" value="100">
+      <span class="val" id="zoomVal">100 %</span>
+    </div>
+    <div class="mode-switch">
+      <span id="labelRun">Lecture</span>
+      <div class="toggle" id="modeToggle" role="switch" aria-label="Basculer le mode configuration"></div>
+      <span id="labelCfg">Config</span>
+    </div>
+  </header>
+
+  <div class="hint" id="hint"></div>
+  <div class="grid" id="grid"></div>
+  <footer>Développé par <a href="https://beezital.fr" target="_blank" rel="noopener">beezital.fr</a></footer>
+
+  <input type="file" id="filePicker" accept="audio/*">
+
+<script>
+"use strict";
+
+const PAD_COUNT = 16;
+const LS_KEY = "samplePad.config.v1";
+
+// neon palette, one color per pad
+const COLORS = [
+  "#00e5ff", "#ff2d95", "#ff9f1c", "#39ff6a",
+  "#b967ff", "#ffe14d", "#ff5252", "#4dc3ff",
+  "#00ffc8", "#ff6ec7", "#ffb14d", "#7dff5e",
+  "#8f7bff", "#fff06e", "#ff7a7a", "#5ee0ff",
+];
+
+// physical key positions (layout-independent: works on AZERTY and QWERTY)
+const KEY_CODES = [
+  "Digit1", "Digit2", "Digit3", "Digit4",
+  "Digit5", "Digit6", "Digit7", "Digit8",
+  "Digit9", "Digit0", "KeyQ", "KeyW",
+  "KeyE", "KeyR", "KeyT", "KeyY",
+];
+
+// ---------- persistence ----------
+// localStorage: lightweight config (mode + file names)
+// IndexedDB:    the audio blobs themselves (survive restarts)
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { console.warn("config read failed", e); }
+  return { mode: "runtime", zoom: 100, pads: Array.from({ length: PAD_COUNT }, () => null) };
+}
+
+function saveConfig() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(config));
+  } catch (e) { console.warn("config save failed", e); }
+}
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open("samplePad", 1);
+    req.onupgradeneeded = () => req.result.createObjectStore("samples");
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbPut(db, key, value) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("samples", "readwrite");
+    tx.objectStore("samples").put(value, key);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function idbGet(db, key) {
+  return new Promise((resolve, reject) => {
+    const req = db.transaction("samples").objectStore("samples").get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function idbDelete(db, key) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("samples", "readwrite");
+    tx.objectStore("samples").delete(key);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ---------- state ----------
+const config = loadConfig();
+const pads = [];   // { el, nameEl, keyEl, progressEl, audio, url, playing }
+let db = null;
+let pickerTarget = null;
+
+// ---------- UI ----------
+const grid = document.getElementById("grid");
+const hint = document.getElementById("hint");
+const modeToggle = document.getElementById("modeToggle");
+const filePicker = document.getElementById("filePicker");
+
+for (let i = 0; i < PAD_COUNT; i++) {
+  const el = document.createElement("div");
+  el.className = "pad empty";
+  el.style.setProperty("--pad-color", COLORS[i]);
+  el.innerHTML = `
+    <span class="key"></span>
+    <span class="name">vide</span>
+    <div class="cfg">
+      <button class="load">Charger…</button>
+      <button class="clear" hidden>Effacer</button>
+    </div>
+    <div class="progress"></div>`;
+  grid.appendChild(el);
+
+  const pad = {
+    el,
+    nameEl: el.querySelector(".name"),
+    keyEl: el.querySelector(".key"),
+    progressEl: el.querySelector(".progress"),
+    audio: null,
+    url: null,
+    playing: false,
+  };
+  pads.push(pad);
+
+  el.addEventListener("click", () => {
+    if (document.body.classList.contains("config-mode")) return;
+    onPadTap(i);
+  });
+  el.querySelector(".load").addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    pickerTarget = i;
+    filePicker.value = "";
+    filePicker.click();
+  });
+  el.querySelector(".clear").addEventListener("click", async (ev) => {
+    ev.stopPropagation();
+    await clearPad(i);
+  });
+}
+
+filePicker.addEventListener("change", async () => {
+  const file = filePicker.files[0];
+  if (!file || pickerTarget === null) return;
+  await assignFile(pickerTarget, file);
+  pickerTarget = null;
+});
+
+// ---------- zoom ----------
+const zoomSlider = document.getElementById("zoomSlider");
+const zoomVal = document.getElementById("zoomVal");
+
+function applyZoom() {
+  const z = config.zoom || 100;
+  document.documentElement.style.setProperty("--zoom", z / 100);
+  zoomSlider.value = z;
+  zoomVal.textContent = z + " %";
+}
+
+zoomSlider.addEventListener("input", () => {
+  config.zoom = Number(zoomSlider.value);
+  applyZoom();
+});
+zoomSlider.addEventListener("change", saveConfig);
+
+// ---------- keyboard shortcuts ----------
+// default labels (QWERTY); replaced by the real layout when the browser exposes it
+KEY_CODES.forEach((code, i) => {
+  pads[i].keyEl.textContent = code.replace(/^Digit|^Key/, "");
+});
+if (navigator.keyboard && navigator.keyboard.getLayoutMap) {
+  navigator.keyboard.getLayoutMap().then((map) => {
+    KEY_CODES.forEach((code, i) => {
+      if (code.startsWith("Digit")) return; // always label digits 1-4
+      const label = map.get(code);
+      if (label) pads[i].keyEl.textContent = label.toUpperCase();
+    });
+  }).catch(() => {});
+}
+
+// numeric keypad digits also trigger pads 1-10 (only while NumLock is on:
+// with NumLock off e.key is "End"/"ArrowDown"/…, and we leave those alone)
+const NUMPAD_ALIAS = {
+  Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, Numpad5: 4,
+  Numpad6: 5, Numpad7: 6, Numpad8: 7, Numpad9: 8, Numpad0: 9,
+};
+
+// fallback when the event carries no physical code (some virtual keyboards)
+const KEY_FALLBACK = "1234567890qwerty";
+
+document.addEventListener("keydown", (e) => {
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (document.body.classList.contains("config-mode")) return;
+  let i = KEY_CODES.indexOf(e.code);
+  if (i === -1 && e.code in NUMPAD_ALIAS && /^[0-9]$/.test(e.key)) {
+    i = NUMPAD_ALIAS[e.code];
+  }
+  if (i === -1 && !e.code && e.key.length === 1) {
+    i = KEY_FALLBACK.indexOf(e.key.toLowerCase());
+  }
+  if (i === -1) return;
+  e.preventDefault();
+  onPadTap(i);
+});
+
+// ---------- pad logic ----------
+function setPadLoaded(i, name) {
+  const pad = pads[i];
+  pad.el.classList.remove("empty");
+  pad.nameEl.textContent = name;
+  pad.el.querySelector(".clear").hidden = false;
+}
+
+function setPadEmpty(i) {
+  const pad = pads[i];
+  pad.el.classList.add("empty");
+  pad.nameEl.textContent = "vide";
+  pad.el.querySelector(".clear").hidden = true;
+}
+
+function attachAudio(i, blob, name) {
+  const pad = pads[i];
+  if (pad.url) URL.revokeObjectURL(pad.url);
+  pad.url = URL.createObjectURL(blob);
+  pad.audio = new Audio(pad.url);
+  pad.audio.preload = "auto";
+  pad.audio.addEventListener("ended", () => stopPad(i));
+  setPadLoaded(i, name);
+}
+
+async function assignFile(i, file) {
+  stopPad(i);
+  try {
+    await idbPut(db, i, { name: file.name, type: file.type, blob: file });
+  } catch (e) {
+    hint.textContent = "Impossible d'enregistrer l'échantillon dans le navigateur : " + e;
+    return;
+  }
+  config.pads[i] = { name: file.name };
+  saveConfig();
+  attachAudio(i, file, file.name);
+}
+
+async function clearPad(i) {
+  stopPad(i);
+  const pad = pads[i];
+  if (pad.url) { URL.revokeObjectURL(pad.url); pad.url = null; }
+  pad.audio = null;
+  config.pads[i] = null;
+  saveConfig();
+  try { await idbDelete(db, i); } catch (e) { console.warn(e); }
+  setPadEmpty(i);
+}
+
+function onPadTap(i) {
+  const pad = pads[i];
+  if (!pad.audio) return;
+  if (pad.playing) {
+    stopPad(i);
+  } else {
+    pad.audio.currentTime = 0;
+    pad.audio.play().catch((e) => { hint.textContent = "Échec de la lecture : " + e; });
+    pad.playing = true;
+    pad.el.classList.add("playing");
+    trackProgress(i);
+  }
+}
+
+function stopPad(i) {
+  const pad = pads[i];
+  if (pad.audio) {
+    pad.audio.pause();
+    pad.audio.currentTime = 0;
+  }
+  pad.playing = false;
+  pad.el.classList.remove("playing");
+  pad.progressEl.style.setProperty("--p", "0%");
+}
+
+function trackProgress(i) {
+  const pad = pads[i];
+  if (!pad.playing || !pad.audio) return;
+  const d = pad.audio.duration;
+  pad.progressEl.style.setProperty("--p", d ? (pad.audio.currentTime / d * 100) + "%" : "0%");
+  requestAnimationFrame(() => trackProgress(i));
+}
+
+// ---------- mode switch ----------
+function applyMode() {
+  const isConfig = config.mode === "config";
+  document.body.classList.toggle("config-mode", isConfig);
+  modeToggle.classList.toggle("config", isConfig);
+  document.getElementById("labelRun").classList.toggle("active-label", !isConfig);
+  document.getElementById("labelCfg").classList.toggle("active-label", isConfig);
+  hint.textContent = isConfig
+    ? "Mode configuration — chargez un fichier audio sur chaque pad."
+    : "Cliquez sur un pad ou utilisez les touches indiquées pour lancer / arrêter un son.";
+}
+
+modeToggle.addEventListener("click", () => {
+  config.mode = config.mode === "config" ? "runtime" : "config";
+  if (config.mode === "config") pads.forEach((_, i) => stopPad(i));
+  saveConfig();
+  applyMode();
+});
+
+// ---------- startup: restore saved samples ----------
+(async function init() {
+  applyMode();
+  applyZoom();
+  try {
+    db = await openDB();
+  } catch (e) {
+    hint.textContent = "Stockage du navigateur indisponible — les échantillons ne seront pas conservés.";
+    return;
+  }
+  for (let i = 0; i < PAD_COUNT; i++) {
+    if (!config.pads[i]) continue;
+    try {
+      const rec = await idbGet(db, i);
+      if (rec && rec.blob) {
+        attachAudio(i, rec.blob, rec.name || config.pads[i].name);
+      } else {
+        config.pads[i] = null; // stale entry
+      }
+    } catch (e) { console.warn("restore failed for pad", i, e); }
+  }
+  saveConfig();
+})();
+</script>
+</body>
+</html>
