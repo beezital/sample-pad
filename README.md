@@ -36,7 +36,8 @@ Aucune installation, aucun build, aucune dépendance : un seul fichier [`index.h
 | Navigateur | Version minimale |
 |---|---|
 | Chrome / Edge | 111 (mars 2023) |
-| Firefox | 126 (mai 2024) |
+| Firefox | 113 (mai 2023) |
+| Safari / iOS | 16.2 (décembre 2022) |
 
 ## Licence
 
