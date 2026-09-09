@@ -288,7 +288,21 @@
 "use strict";
 
 const PAD_COUNT = 16;
-const LS_KEY = "samplePad.config.v1";
+
+// Browser storage is partitioned by origin, but Chrome/Edge treat ALL
+// file:// pages as one origin — copies of this file in different local
+// directories would share their data. Scope the keys by directory path
+// so each local copy is independent; http(s) origins need no suffix.
+const STORAGE_SCOPE = (() => {
+  if (location.protocol !== "file:") return "";
+  const dir = decodeURIComponent(location.pathname).replace(/[^/]*$/, "");
+  let h = 5381;
+  for (const ch of dir) h = (h * 33 + ch.codePointAt(0)) >>> 0;
+  return "-" + h.toString(36);
+})();
+
+const LS_KEY = "samplePad.config.v1" + STORAGE_SCOPE;
+const DB_NAME = "samplePad" + STORAGE_SCOPE;
 
 // neon palette, one color per pad
 const COLORS = [
@@ -326,7 +340,7 @@ function saveConfig() {
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open("samplePad", 1);
+    const req = indexedDB.open(DB_NAME, 1);
     req.onupgradeneeded = () => req.result.createObjectStore("samples");
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
