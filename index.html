@@ -282,7 +282,10 @@
   <div class="grid" id="grid"></div>
   <footer>Développé par <a href="https://beezital.fr" target="_blank" rel="noopener">beezital.fr</a></footer>
 
-  <input type="file" id="filePicker" accept="audio/*">
+  <!-- explicit extensions matter: iOS maps bare audio/* to system file
+       types unreliably and greys out e.g. MP3s in the Files picker -->
+  <input type="file" id="filePicker"
+         accept="audio/*,.mp3,.m4a,.aac,.wav,.ogg,.oga,.opus,.flac,.mp4,.webm">
 
 <script>
 "use strict";
